@@ -2010,7 +2010,7 @@ test("doesn't update URL until navigation to a suspending screen commits", async
 
   expect(window.location.pathname).toBe('/');
 
-  await act(() => navigation.navigate('Profile'));
+  await act(async () => navigation.navigate('Profile'));
 
   expect(window.location.pathname).toBe('/');
 
@@ -2058,11 +2058,11 @@ test("doesn't add history entry for navigation interrupted before commit", async
     </NavigationContainer>
   );
 
-  await act(() => navigation.navigate('Profile'));
+  await act(async () => navigation.navigate('Profile'));
 
   expect(window.location.pathname).toBe('/');
 
-  await act(() => navigation.dispatch(StackActions.replace('Settings')));
+  await act(async () => navigation.dispatch(StackActions.replace('Settings')));
 
   await waitFor(() => expect(window.location.pathname).toBe('/settings'));
 
@@ -2102,26 +2102,17 @@ test('preserves history entries when traversal is slower than the fallback timeo
 
   const originalGo = window.history.go.bind(window.history);
 
-  const spy = jest.spyOn(window.history, 'go').mockImplementation((n) => {
+  const goSpy = jest.spyOn(window.history, 'go').mockImplementation((n) => {
     setTimeout(() => originalGo(n), 1500);
   });
 
   act(() => navigation.goBack());
 
-  await act(async () => {});
-
-  act(() => jest.advanceTimersByTime(1000));
-
-  await act(async () => {});
-
-  act(() => jest.advanceTimersByTime(500));
-
-  await act(async () => {});
-  act(() => jest.advanceTimersByTime(100));
+  await act(() => jest.advanceTimersByTimeAsync(1600));
 
   await waitFor(() => expect(window.location.pathname).toBe('/'));
 
-  spy.mockRestore();
+  goSpy.mockRestore();
 
   act(() => window.history.forward());
 
@@ -2167,28 +2158,25 @@ test('keeps the latest navigation when programmatic back is delayed', async () =
 
   const originalGo = window.history.go.bind(window.history);
 
-  const spy = jest.spyOn(window.history, 'go').mockImplementation((n) => {
+  const goSpy = jest.spyOn(window.history, 'go').mockImplementation((n) => {
     setTimeout(() => originalGo(n), 600);
   });
 
   act(() => navigation.goBack());
 
-  await act(async () => {});
+  await act(() => jest.advanceTimersByTimeAsync(0));
+
+  expect(goSpy).toHaveBeenCalledWith(-1);
 
   act(() => navigation.navigate('Feed'));
 
-  await act(async () => {});
-
-  act(() => jest.advanceTimersByTime(600));
-
-  await act(async () => {});
-  act(() => jest.advanceTimersByTime(100));
+  await act(() => jest.advanceTimersByTimeAsync(700));
 
   await waitFor(() => expect(window.location.pathname).toBe('/feed'));
 
   expect(navigation.getCurrentRoute()?.name).toBe('Feed');
 
-  spy.mockRestore();
+  goSpy.mockRestore();
 
   act(() => window.history.back());
 
@@ -2232,28 +2220,25 @@ test('queues replace while programmatic back is delayed', async () => {
 
   const originalGo = window.history.go.bind(window.history);
 
-  const spy = jest.spyOn(window.history, 'go').mockImplementation((n) => {
+  const goSpy = jest.spyOn(window.history, 'go').mockImplementation((n) => {
     setTimeout(() => originalGo(n), 600);
   });
 
   act(() => navigation.goBack());
 
-  await act(async () => {});
+  await act(() => jest.advanceTimersByTimeAsync(0));
+
+  expect(goSpy).toHaveBeenCalledWith(-1);
 
   act(() => navigation.dispatch(StackActions.replace('Settings')));
 
-  await act(async () => {});
-
-  act(() => jest.advanceTimersByTime(600));
-
-  await act(async () => {});
-  act(() => jest.advanceTimersByTime(100));
+  await act(() => jest.advanceTimersByTimeAsync(700));
 
   await waitFor(() => expect(window.location.pathname).toBe('/settings'));
 
   expect(navigation.getCurrentRoute()?.name).toBe('Settings');
 
-  spy.mockRestore();
+  goSpy.mockRestore();
 
   act(() => window.history.back());
 
@@ -2299,35 +2284,50 @@ test('applies multiple updates queued during delayed history traversal', async (
 
   const originalGo = window.history.go.bind(window.history);
 
-  const spy = jest.spyOn(window.history, 'go').mockImplementation((n) => {
+  const goSpy = jest.spyOn(window.history, 'go').mockImplementation((n) => {
     setTimeout(() => originalGo(n), 600);
   });
 
   act(() => navigation.goBack());
 
-  await act(async () => {});
+  await act(() => jest.advanceTimersByTimeAsync(0));
+
+  expect(goSpy).toHaveBeenCalledWith(-1);
 
   act(() => navigation.navigate('B'));
   act(() => navigation.navigate('C'));
 
-  await act(async () => {});
-
-  act(() => jest.advanceTimersByTime(600));
-
-  await act(async () => {});
-  act(() => jest.advanceTimersByTime(100));
+  await act(() => jest.advanceTimersByTimeAsync(700));
 
   await waitFor(() => expect(window.location.pathname).toBe('/c'));
 
   expect(navigation.getCurrentRoute()?.name).toBe('C');
+  expect(navigation.getRootState().routes.map((route) => route.name)).toEqual([
+    'Home',
+    'A',
+    'B',
+    'C',
+  ]);
 
-  spy.mockRestore();
+  goSpy.mockRestore();
 
   act(() => window.history.back());
 
   await waitFor(() => expect(window.location.pathname).toBe('/a'));
 
   expect(navigation.getCurrentRoute()?.name).toBe('A');
+
+  act(() => window.history.forward());
+
+  await waitFor(() => expect(window.location.pathname).toBe('/c'));
+
+  expect(navigation.getCurrentRoute()?.name).toBe('C');
+  expect(navigation.getRootState().routes.map((route) => route.name)).toEqual([
+    'Home',
+    'A',
+    'B',
+    'C',
+  ]);
 });
 
 test('syncs a queued navigation after history traversal times out', async () => {
@@ -2365,11 +2365,13 @@ test('syncs a queued navigation after history traversal times out', async () => 
 
   await waitFor(() => expect(window.location.pathname).toBe('/settings'));
 
-  const spy = jest.spyOn(window.history, 'go').mockImplementation(() => {});
+  const goSpy = jest.spyOn(window.history, 'go').mockImplementation(() => {});
 
   act(() => navigation.goBack());
 
-  await act(async () => {});
+  await act(() => jest.advanceTimersByTimeAsync(0));
+
+  expect(goSpy).toHaveBeenCalledWith(-1);
 
   act(() => navigation.navigate('Feed'));
 
@@ -2377,13 +2379,15 @@ test('syncs a queued navigation after history traversal times out', async () => 
 
   expect(window.location.pathname).toBe('/settings');
 
-  act(() => jest.advanceTimersByTime(1000));
+  await act(() => jest.advanceTimersByTimeAsync(999));
+
+  expect(window.location.pathname).toBe('/settings');
+
+  await act(() => jest.advanceTimersByTimeAsync(1));
 
   await waitFor(() => expect(window.location.pathname).toBe('/feed'));
 
   expect(navigation.getCurrentRoute()?.name).toBe('Feed');
-
-  spy.mockRestore();
 });
 
 test('rolls back prevented browser back when forward traversal is delayed', async () => {
@@ -2423,7 +2427,7 @@ test('rolls back prevented browser back when forward traversal is delayed', asyn
 
   const originalGo = window.history.go.bind(window.history);
 
-  const spy = jest.spyOn(window.history, 'go').mockImplementation((n) => {
+  jest.spyOn(window.history, 'go').mockImplementation((n) => {
     setTimeout(() => originalGo(n), 600);
   });
 
@@ -2433,16 +2437,11 @@ test('rolls back prevented browser back when forward traversal is delayed', asyn
 
   expect(window.location.pathname).toBe('/');
 
-  act(() => jest.advanceTimersByTime(600));
-
-  await act(async () => {});
-  act(() => jest.advanceTimersByTime(100));
+  await act(() => jest.advanceTimersByTimeAsync(700));
 
   await waitFor(() => expect(window.location.pathname).toBe('/profile'));
 
   expect(navigation.getCurrentRoute()?.name).toBe('Profile');
-
-  spy.mockRestore();
 });
 
 test('syncs a delayed multi-entry programmatic pop', async () => {
@@ -2486,30 +2485,31 @@ test('syncs a delayed multi-entry programmatic pop', async () => {
 
   const originalGo = window.history.go.bind(window.history);
 
-  const spy = jest.spyOn(window.history, 'go').mockImplementation((n) => {
+  const goSpy = jest.spyOn(window.history, 'go').mockImplementation((n) => {
     setTimeout(() => originalGo(n), 600);
   });
 
   act(() => navigation.dispatch(StackActions.pop(2)));
 
-  await act(async () => {});
-
-  act(() => jest.advanceTimersByTime(600));
-
-  await act(async () => {});
-  act(() => jest.advanceTimersByTime(100));
+  await act(() => jest.advanceTimersByTimeAsync(700));
 
   await waitFor(() => expect(window.location.pathname).toBe('/a'));
 
   expect(navigation.getCurrentRoute()?.name).toBe('A');
 
-  spy.mockRestore();
+  goSpy.mockRestore();
 
   act(() => window.history.forward());
 
   await waitFor(() => expect(window.location.pathname).toBe('/b'));
 
   expect(navigation.getCurrentRoute()?.name).toBe('B');
+
+  act(() => window.history.forward());
+
+  await waitFor(() => expect(window.location.pathname).toBe('/c'));
+
+  expect(navigation.getCurrentRoute()?.name).toBe('C');
 });
 
 test('handles browser navigation during a delayed programmatic traversal', async () => {
@@ -2521,6 +2521,7 @@ test('handles browser navigation during a delayed programmatic traversal', async
         Home: '',
         A: 'a',
         B: 'b',
+        C: 'c',
       },
     },
   };
@@ -2533,6 +2534,7 @@ test('handles browser navigation during a delayed programmatic traversal', async
         <Stack.Screen name="Home" component={TestScreen} />
         <Stack.Screen name="A" component={TestScreen} />
         <Stack.Screen name="B" component={TestScreen} />
+        <Stack.Screen name="C" component={TestScreen} />
       </Stack.Navigator>
     </NavigationContainer>
   );
@@ -2545,32 +2547,43 @@ test('handles browser navigation during a delayed programmatic traversal', async
 
   await waitFor(() => expect(window.location.pathname).toBe('/b'));
 
+  act(() => navigation.navigate('C'));
+
+  await waitFor(() => expect(window.location.pathname).toBe('/c'));
+
   const originalGo = window.history.go.bind(window.history);
 
-  const spy = jest.spyOn(window.history, 'go').mockImplementation((n) => {
+  const goSpy = jest.spyOn(window.history, 'go').mockImplementation((n) => {
     setTimeout(() => originalGo(n), 600);
   });
 
   act(() => navigation.goBack());
 
-  await act(async () => {});
+  await act(() => jest.advanceTimersByTimeAsync(0));
+
+  expect(goSpy).toHaveBeenCalledWith(-1);
 
   act(() => window.history.back());
 
-  act(() => jest.advanceTimersByTime(1));
+  await act(() => jest.advanceTimersByTimeAsync(700));
 
-  await act(async () => {});
+  await waitFor(() => expect(window.location.pathname).toBe('/a'));
 
-  act(() => jest.advanceTimersByTime(600));
+  expect(navigation.getCurrentRoute()?.name).toBe('A');
 
-  await act(async () => {});
-  act(() => jest.advanceTimersByTime(100));
+  goSpy.mockRestore();
 
-  await waitFor(() => expect(window.location.pathname).toBe('/'));
+  act(() => window.history.forward());
 
-  expect(navigation.getCurrentRoute()?.name).toBe('Home');
+  await waitFor(() => expect(window.location.pathname).toBe('/b'));
 
-  spy.mockRestore();
+  expect(navigation.getCurrentRoute()?.name).toBe('B');
+
+  act(() => window.history.forward());
+
+  await waitFor(() => expect(window.location.pathname).toBe('/c'));
+
+  expect(navigation.getCurrentRoute()?.name).toBe('C');
 });
 
 test('navigates to the last screen without waiting for an interrupted one', async () => {
@@ -2632,8 +2645,8 @@ test('navigates to the last screen without waiting for an interrupted one', asyn
     </NavigationContainer>
   );
 
-  await act(() => navigation.navigate('A'));
-  await act(() => navigation.navigate('B'));
+  await act(async () => navigation.navigate('A'));
+  await act(async () => navigation.navigate('B'));
 
   expect(window.location.pathname).toBe('/');
 
@@ -2717,8 +2730,8 @@ test("doesn't navigate to an interrupted screen that finishes loading first", as
     </NavigationContainer>
   );
 
-  await act(() => navigation.navigate('A'));
-  await act(() => navigation.navigate('B'));
+  await act(async () => navigation.navigate('A'));
+  await act(async () => navigation.navigate('B'));
 
   expect(window.location.pathname).toBe('/');
 
