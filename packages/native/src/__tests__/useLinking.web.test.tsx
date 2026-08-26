@@ -2430,7 +2430,7 @@ test('applies multiple updates queued during delayed history traversal', async (
   await waitFor(() => expect(window.location.pathname).toBe('/c'));
 
   expect(navigation.getCurrentRoute()?.name).toBe('C');
-  expect(navigation.getRootState().routes.map((route) => route.name)).toEqual([
+  expect(navigation.getRootState()?.routes.map((route) => route.name)).toEqual([
     'Home',
     'A',
     'B',
@@ -2450,7 +2450,7 @@ test('applies multiple updates queued during delayed history traversal', async (
   await waitFor(() => expect(window.location.pathname).toBe('/c'));
 
   expect(navigation.getCurrentRoute()?.name).toBe('C');
-  expect(navigation.getRootState().routes.map((route) => route.name)).toEqual([
+  expect(navigation.getRootState()?.routes.map((route) => route.name)).toEqual([
     'Home',
     'A',
     'B',
